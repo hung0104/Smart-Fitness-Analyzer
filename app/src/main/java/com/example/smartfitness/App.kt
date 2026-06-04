@@ -6,18 +6,19 @@ import com.example.smartfitness.data.AppDatabase
 import org.opencv.android.OpenCVLoader
 
 class App : Application() {
+    lateinit var database: AppDatabase
 
     override fun onCreate() {
         super.onCreate()
 
-        // 1. Khởi tạo Cơ sở dữ liệu (Room DB) qua Singleton để đảm bảo thống nhất
-        AppDatabase.getDatabase(this)
+        // Gọi trực tiếp hàm getDatabase an toàn mà bạn đã tự tay thiết kế
+        database = AppDatabase.getDatabase(this)
 
-        // 2. Khởi tạo "Bộ não" OpenCV
+        // Khởi tạo "bộ não" phân tích hình ảnh
         if (OpenCVLoader.initDebug()) {
-            Log.d("OpenCV", "Tải OpenCV thành công!")
+            Log.d("OpenCV", "Nạp thư viện OpenCV thành công!")
         } else {
-            Log.e("OpenCV", "Lỗi tải OpenCV!")
+            Log.e("OpenCV", "Không thể nạp thư viện OpenCV!")
         }
     }
 }

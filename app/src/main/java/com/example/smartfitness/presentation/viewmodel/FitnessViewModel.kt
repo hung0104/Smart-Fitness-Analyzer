@@ -5,61 +5,96 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.smartfitness.data.*
 import com.example.smartfitness.domain.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class FitnessViewModel(private val repository: FitnessRepository) : ViewModel() {
 
-    // Trạng thái lưu trữ thông tin người dùng
-    private val _userProfile = MutableStateFlow<UserProfile?>(null)
-    val userProfile: StateFlow<UserProfile?> = _userProfile
+    val usersList = repository.allUsers.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    // Trạng thái lưu trữ kết quả phân tích cơ thể
+    private val _currentUser = MutableStateFlow<UserEntity?>(null)
+    val currentUser: StateFlow<UserEntity?> = _currentUser
+
+    private val _latestRecord = MutableStateFlow<FitnessRecord?>(null)
+    val latestRecord: StateFlow<FitnessRecord?> = _latestRecord
+
+    // THIẾT KẾ MỚI: Luồng quản lý danh sách bài tập được đề xuất
+    private val _recommendedExercises = MutableStateFlow<List<Exercise>>(emptyList())
+    val recommendedExercises: StateFlow<List<Exercise>> = _recommendedExercises
+
     private val _bodyMetrics = MutableStateFlow<BodyMetrics?>(null)
     val bodyMetrics: StateFlow<BodyMetrics?> = _bodyMetrics
 
-    // Trạng thái lưu trữ ảnh đã chụp
     private val _capturedImage = MutableStateFlow<Bitmap?>(null)
     val capturedImage: StateFlow<Bitmap?> = _capturedImage
 
-    // Lịch sử đo lấy từ cơ sở dữ liệu
-    val history = repository.history
+    private var historyObservationJob: Job? = null
 
-    // Hàm lưu thông tin nhập từ màn hình 1
-    fun saveUserProfile(height: String, weight: String, age: String, gender: Gender, goal: Goal): Boolean {
+    // CẬP NHẬT: Tự động nạp bài tập khi chọn thành viên
+    fun selectUser(user: UserEntity) {
+        _currentUser.value = user
+        _recommendedExercises.value = repository.getExercisesByGoal(user.goal)
+        observeLatestRecord(user.userId)
+    }
+
+    // CẬP NHẬT: Tự động nạp bài tập khi tạo thành viên mới
+    fun createNewUser(name: String, height: String, weight: String, age: String, gender: Gender, goal: Goal): Boolean {
         return try {
             val h = height.toFloat()
             val w = weight.toFloat()
             val a = age.toInt()
-            if (h <= 0 || w <= 0 || a <= 0) return false
+            if (name.isBlank() || h <= 0 || w <= 0 || a <= 0) return false
 
-            _userProfile.value = UserProfile(h, w, a, gender, goal)
+            viewModelScope.launch {
+                val newUser = UserEntity(name = name, heightCm = h, weightKg = w, age = a, gender = gender, goal = goal)
+                val newId = repository.saveUser(newUser)
+                val savedUser = newUser.copy(userId = newId.toInt())
+                _currentUser.value = savedUser
+                _recommendedExercises.value = repository.getExercisesByGoal(savedUser.goal)
+                observeLatestRecord(savedUser.userId)
+            }
             true
         } catch (e: Exception) {
-            // Nếu người dùng nhập sai định dạng (ví dụ nhập chữ vào ô số), trả về false
             false
         }
     }
 
-    // Hàm xử lý ảnh sau khi chụp ở màn hình 2
+    private fun observeLatestRecord(userId: Int) {
+        historyObservationJob?.cancel()
+        historyObservationJob = viewModelScope.launch {
+            repository.getHistoryForUser(userId).collect { list ->
+                _latestRecord.value = list.firstOrNull()
+            }
+        }
+    }
+
+    fun getUserHistory(userId: Int): Flow<List<FitnessRecord>> {
+        return repository.getHistoryForUser(userId)
+    }
+
     fun processCapturedImage(bitmap: Bitmap) {
         _capturedImage.value = bitmap
+        _bodyMetrics.value = null
 
-        // Chạy xử lý ảnh nặng trong luồng phụ (background) để không làm đơ ứng dụng
         viewModelScope.launch {
-            // Gọi OpenCV để phân tích
             val metrics = OpenCVProcessor.processBodyImage(bitmap)
             _bodyMetrics.value = metrics
 
-            // Lưu kết quả vào cơ sở dữ liệu (Room DB)
-            _userProfile.value?.let { profile ->
-                val bmi = HealthCalculator.calculateBMI(profile.weightKg, profile.heightCm)
+            _currentUser.value?.let { user ->
+                val bmi = HealthCalculator.calculateBMI(user.weightKg, user.heightCm)
                 repository.saveRecord(
                     FitnessRecord(
+                        userId = user.userId,
                         bmi = bmi,
                         bodyShape = metrics.bodyShape,
-                        weight = profile.weightKg
+                        weight = user.weightKg,
+                        swr = metrics.swr,
+                        whr = metrics.whr
                     )
                 )
             }
