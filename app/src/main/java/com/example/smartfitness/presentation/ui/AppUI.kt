@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -42,6 +44,8 @@ import com.example.smartfitness.data.Gender
 import com.example.smartfitness.data.Goal
 import com.example.smartfitness.data.Exercise
 import com.example.smartfitness.data.FitnessRecord
+import com.example.smartfitness.data.BodyMetrics
+import com.example.smartfitness.data.UserEntity
 import com.example.smartfitness.domain.HealthCalculator
 import com.example.smartfitness.presentation.viewmodel.FitnessViewModel
 import java.text.SimpleDateFormat
@@ -135,6 +139,10 @@ fun DashboardScreen(navController: NavController, viewModel: FitnessViewModel) {
                         }
                         Spacer(Modifier.height(8.dp))
                         Text("Trạng thái cơ thể: ${HealthCalculator.getBMICategory(latestRecord!!.bmi)}", style = MaterialTheme.typography.bodyLarge)
+
+                        Spacer(Modifier.height(16.dp))
+                        Divider(modifier = Modifier.padding(vertical = 12.dp))
+                        RecommendedExercisesSection(viewModel)
                     }
                 }
             }
@@ -221,7 +229,13 @@ fun ResultsScreen(navController: NavController, viewModel: FitnessViewModel) {
     val dinnerCals = targetCals * 0.30f
     val snackCals = targetCals * 0.10f
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+    Column(
+        modifier = Modifier
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Kết quả phân tích", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = {
@@ -362,10 +376,33 @@ fun InputScreen(navController: NavController, viewModel: FitnessViewModel) {
         Text("Tạo tài khoản mới", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
 
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên thành viên") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = height, onValueChange = { height = it }, label = { Text("Chiều cao (cm)") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = weight, onValueChange = { weight = it }, label = { Text("Cân nặng (kg)") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = age, onValueChange = { age = it }, label = { Text("Tuổi") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Tên thành viên") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = height,
+            onValueChange = { height = it },
+            label = { Text("Chiều cao (cm)") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+        OutlinedTextField(
+            value = weight,
+            onValueChange = { weight = it },
+            label = { Text("Cân nặng (kg)") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+        OutlinedTextField(
+            value = age,
+            onValueChange = { age = it },
+            label = { Text("Tuổi") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
 
         Spacer(Modifier.height(16.dp))
         Row(
@@ -486,6 +523,7 @@ private fun imageProxyToBitmap(image: ImageProxy): Bitmap {
     val bytes = ByteArray(buffer.remaining())
     buffer.get(bytes)
     val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, null)
+        ?: return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
     val matrix = Matrix().apply { postRotate(image.imageInfo.rotationDegrees.toFloat()) }
     return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 }
